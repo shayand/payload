@@ -1,12 +1,12 @@
-import type { SearchConfig, SyncWithSearch } from '../../types'
+import type { DocToSync, SearchConfig, SyncWithSearch } from '../../types'
 
 const syncWithSearch: SyncWithSearch = async (args) => {
   const {
+    collection,
     doc,
     operation,
     req: { payload },
-    // @ts-expect-error
-    collection,
+    req,
     // @ts-expect-error
     searchConfig,
   } = args
@@ -15,7 +15,7 @@ const syncWithSearch: SyncWithSearch = async (args) => {
 
   const { beforeSync, defaultPriorities, deleteDrafts, syncDrafts } = searchConfig as SearchConfig // todo fix SyncWithSearch type, see note in ./types.ts
 
-  let dataToSave = {
+  let dataToSave: DocToSync = {
     doc: {
       relationTo: collection,
       value: id,
@@ -27,6 +27,7 @@ const syncWithSearch: SyncWithSearch = async (args) => {
     dataToSave = await beforeSync({
       originalDoc: doc,
       payload,
+      req,
       searchDoc: dataToSave,
     })
   }
@@ -54,12 +55,13 @@ const syncWithSearch: SyncWithSearch = async (args) => {
   try {
     if (operation === 'create') {
       if (doSync) {
-        payload.create({
+        await payload.create({
           collection: 'search',
           data: {
             ...dataToSave,
             priority: defaultPriority,
           },
+          req,
         })
       }
     }
@@ -70,6 +72,7 @@ const syncWithSearch: SyncWithSearch = async (args) => {
         const searchDocQuery = await payload.find({
           collection: 'search',
           depth: 0,
+          req,
           where: {
             'doc.value': {
               equals: id,
@@ -78,7 +81,7 @@ const syncWithSearch: SyncWithSearch = async (args) => {
         })
 
         const docs: Array<{
-          id: string
+          id: number | string
           priority?: number
         }> = searchDocQuery?.docs || []
 
@@ -88,14 +91,12 @@ const syncWithSearch: SyncWithSearch = async (args) => {
         // to ensure the same, out-of-date result does not appear twice (where only syncing the first found doc)
         if (duplicativeDocs.length > 0) {
           try {
-            Promise.all(
-              duplicativeDocs.map(({ id: duplicativeDocID }) =>
-                payload.delete({
-                  id: duplicativeDocID,
-                  collection: 'search',
-                }),
-              ), // eslint-disable-line function-paren-newline
-            )
+            const duplicativeDocIDs = duplicativeDocs.map(({ id }) => id)
+            await payload.delete({
+              collection: 'search',
+              req,
+              where: { id: { in: duplicativeDocIDs } },
+            })
           } catch (err: unknown) {
             payload.logger.error(`Error deleting duplicative search documents.`)
           }
@@ -107,13 +108,14 @@ const syncWithSearch: SyncWithSearch = async (args) => {
           if (doSync) {
             // update the doc normally
             try {
-              payload.update({
+              await payload.update({
                 id: searchDocID,
                 collection: 'search',
                 data: {
                   ...dataToSave,
                   priority: foundDoc.priority || defaultPriority,
                 },
+                req,
               })
             } catch (err: unknown) {
               payload.logger.error(`Error updating search document.`)
@@ -122,9 +124,10 @@ const syncWithSearch: SyncWithSearch = async (args) => {
           if (deleteDrafts && status === 'draft') {
             // do not include draft docs in search results, so delete the record
             try {
-              payload.delete({
+              await payload.delete({
                 id: searchDocID,
                 collection: 'search',
+                req,
               })
             } catch (err: unknown) {
               payload.logger.error(`Error deleting search document: ${err}`)
@@ -132,12 +135,13 @@ const syncWithSearch: SyncWithSearch = async (args) => {
           }
         } else if (doSync) {
           try {
-            payload.create({
+            await payload.create({
               collection: 'search',
               data: {
                 ...dataToSave,
                 priority: defaultPriority,
               },
+              req,
             })
           } catch (err: unknown) {
             payload.logger.error(`Error creating search document: ${err}`)

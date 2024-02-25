@@ -157,6 +157,7 @@ describe('Localization', () => {
         id,
         collection: localizedPostsSlug,
         data: {
+          localizedCheckbox: false,
           title: spanishTitle,
         },
         locale: spanishLocale,
@@ -174,8 +175,6 @@ describe('Localization', () => {
       await changeLocale(page, spanishLocale)
       await expect(page.locator('#field-title')).toHaveValue(spanishTitle)
 
-      // click checkbox manually
-      await page.locator('#field-localizedCheckbox').click()
       await expect(page.locator('#field-localizedCheckbox')).not.toBeChecked()
     })
 
@@ -216,7 +215,8 @@ describe('Localization', () => {
       await page.fill('#field-layout__0__text', 'test')
       await saveDocAndAssert(page)
 
-      const originalDocURL = page.url()
+      const originalID = await page.locator('.id-label').innerText()
+
       // duplicate
       await openDocControls(page)
       await page.locator('#action-duplicate').click()
@@ -224,8 +224,12 @@ describe('Localization', () => {
 
       // verify that the locale did copy
       await expect(page.locator('#field-title')).toHaveValue(englishTitle)
+
+      // await the success toast
+      await expect(page.locator('.Toastify')).toContainText('successfully duplicated')
+
       // expect that the document has a new id
-      expect(page.url()).not.toStrictEqual(originalDocURL)
+      await expect(page.locator('.id-label')).not.toContainText(originalID)
     })
   })
 })

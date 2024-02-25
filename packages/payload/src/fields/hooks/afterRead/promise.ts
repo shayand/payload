@@ -16,11 +16,13 @@ type Args = {
   currentDepth: number
   depth: number
   doc: Record<string, unknown>
+  fallbackLocale: null | string
   field: Field | TabAsField
   fieldPromises: Promise<void>[]
   findMany: boolean
   flattenLocales: boolean
   global: SanitizedGlobalConfig | null
+  locale: null | string
   overrideAccess: boolean
   populationPromises: Promise<void>[]
   req: PayloadRequest
@@ -44,11 +46,13 @@ export const promise = async ({
   currentDepth,
   depth,
   doc,
+  fallbackLocale,
   field,
   fieldPromises,
   findMany,
   flattenLocales,
   global,
+  locale,
   overrideAccess,
   populationPromises,
   req,
@@ -72,18 +76,13 @@ export const promise = async ({
     typeof siblingDoc[field.name] === 'object' &&
     siblingDoc[field.name] !== null &&
     field.localized &&
-    req.locale !== 'all' &&
+    locale !== 'all' &&
     req.payload.config.localization
 
   if (shouldHoistLocalizedValue) {
     // replace actual value with localized value before sanitizing
     // { [locale]: fields } -> fields
-    const { locale } = req
     const value = siblingDoc[field.name][locale]
-    const fallbackLocale =
-      req.payload.config.localization &&
-      req.payload.config.localization?.fallback &&
-      req.fallbackLocale
 
     let hoistedValue = value
 
@@ -201,7 +200,7 @@ export const promise = async ({
 
         const shouldRunHookOnAllLocales =
           field.localized &&
-          (req.locale === 'all' || !flattenLocales) &&
+          (locale === 'all' || !flattenLocales) &&
           typeof siblingDoc[field.name] === 'object'
 
         if (shouldRunHookOnAllLocales) {
@@ -250,6 +249,7 @@ export const promise = async ({
     }
 
     // Execute access control
+    let allowDefaultValue = true
     if (triggerAccessControl && field.access && field.access.read) {
       const result = overrideAccess
         ? true
@@ -262,6 +262,7 @@ export const promise = async ({
           })
 
       if (!result) {
+        allowDefaultValue = false
         delete siblingDoc[field.name]
       }
     }
@@ -269,12 +270,13 @@ export const promise = async ({
     // Set defaultValue on the field for globals being returned without being first created
     // or collection documents created prior to having a default
     if (
+      allowDefaultValue &&
       typeof siblingDoc[field.name] === 'undefined' &&
       typeof field.defaultValue !== 'undefined'
     ) {
       siblingDoc[field.name] = await getValueWithDefault({
         defaultValue: field.defaultValue,
-        locale: req.locale,
+        locale,
         user: req.user,
         value: siblingDoc[field.name],
       })
@@ -285,7 +287,9 @@ export const promise = async ({
         relationshipPopulationPromise({
           currentDepth,
           depth,
+          fallbackLocale,
           field,
+          locale,
           overrideAccess,
           req,
           showHiddenFields,
@@ -306,11 +310,13 @@ export const promise = async ({
         currentDepth,
         depth,
         doc,
+        fallbackLocale,
         fieldPromises,
         fields: field.fields,
         findMany,
         flattenLocales,
         global,
+        locale,
         overrideAccess,
         populationPromises,
         req,
@@ -334,11 +340,13 @@ export const promise = async ({
             currentDepth,
             depth,
             doc,
+            fallbackLocale,
             fieldPromises,
             fields: field.fields,
             findMany,
             flattenLocales,
             global,
+            locale,
             overrideAccess,
             populationPromises,
             req,
@@ -358,11 +366,13 @@ export const promise = async ({
                 currentDepth,
                 depth,
                 doc,
+                fallbackLocale,
                 fieldPromises,
                 fields: field.fields,
                 findMany,
                 flattenLocales,
                 global,
+                locale,
                 overrideAccess,
                 populationPromises,
                 req,
@@ -394,11 +404,13 @@ export const promise = async ({
               currentDepth,
               depth,
               doc,
+              fallbackLocale,
               fieldPromises,
               fields: block.fields,
               findMany,
               flattenLocales,
               global,
+              locale,
               overrideAccess,
               populationPromises,
               req,
@@ -422,11 +434,13 @@ export const promise = async ({
                   currentDepth,
                   depth,
                   doc,
+                  fallbackLocale,
                   fieldPromises,
                   fields: block.fields,
                   findMany,
                   flattenLocales,
                   global,
+                  locale,
                   overrideAccess,
                   populationPromises,
                   req,
@@ -454,11 +468,13 @@ export const promise = async ({
         currentDepth,
         depth,
         doc,
+        fallbackLocale,
         fieldPromises,
         fields: field.fields,
         findMany,
         flattenLocales,
         global,
+        locale,
         overrideAccess,
         populationPromises,
         req,
@@ -484,11 +500,13 @@ export const promise = async ({
         currentDepth,
         depth,
         doc,
+        fallbackLocale,
         fieldPromises,
         fields: field.fields,
         findMany,
         flattenLocales,
         global,
+        locale,
         overrideAccess,
         populationPromises,
         req,
@@ -508,11 +526,13 @@ export const promise = async ({
         currentDepth,
         depth,
         doc,
+        fallbackLocale,
         fieldPromises,
         fields: field.tabs.map((tab) => ({ ...tab, type: 'tab' })),
         findMany,
         flattenLocales,
         global,
+        locale,
         overrideAccess,
         populationPromises,
         req,

@@ -5,10 +5,8 @@ import type { GeneratedTypes } from '../../../index'
 import type { Payload } from '../../../payload'
 import type { Result } from '../login'
 
-import { getDataLoader } from '../../../collections/dataloader'
 import { APIError } from '../../../errors'
-import { setRequestContext } from '../../../express/setRequestContext'
-import { i18nInit } from '../../../translations/init'
+import { createLocalReq } from '../../../utilities/createLocalReq'
 import login from '../login'
 
 export type Options<TSlug extends keyof GeneratedTypes['collections']> = {
@@ -33,17 +31,12 @@ async function localLogin<TSlug extends keyof GeneratedTypes['collections']>(
 ): Promise<Result & { user: GeneratedTypes['collections'][TSlug] }> {
   const {
     collection: collectionSlug,
-    context,
     data,
     depth,
-    fallbackLocale,
-    locale,
     overrideAccess = true,
-    req = {} as PayloadRequest,
     res,
     showHiddenFields,
   } = options
-  setRequestContext(req, context)
 
   const collection = payload.collections[collectionSlug]
 
@@ -53,14 +46,7 @@ async function localLogin<TSlug extends keyof GeneratedTypes['collections']>(
     )
   }
 
-  req.payloadAPI = req.payloadAPI || 'local'
-  req.payload = payload
-  req.i18n = i18nInit(payload.config.i18n)
-  req.locale = undefined
-  req.fallbackLocale = undefined
-
-  if (!req.t) req.t = req.i18n.t
-  if (!req.payloadDataLoader) req.payloadDataLoader = getDataLoader(req)
+  const req = createLocalReq(options, payload)
 
   const args = {
     collection,
@@ -71,9 +57,6 @@ async function localLogin<TSlug extends keyof GeneratedTypes['collections']>(
     res,
     showHiddenFields,
   }
-
-  if (locale) args.req.locale = locale
-  if (fallbackLocale) args.req.fallbackLocale = fallbackLocale
 
   return login<TSlug>(args)
 }

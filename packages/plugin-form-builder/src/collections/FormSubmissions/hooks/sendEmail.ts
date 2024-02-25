@@ -1,10 +1,11 @@
 import type { Email, FormattedEmail, PluginConfig } from '../../../types'
 
+import { serializeLexical } from '../../../utilities/lexical/serializeLexical'
 import { replaceDoubleCurlys } from '../../../utilities/replaceDoubleCurlys'
-import { serialize } from '../../../utilities/serializeRichText'
+import { serializeSlate } from '../../../utilities/slate/serializeSlate'
 
 const sendEmail = async (beforeChangeData: any, formConfig: PluginConfig): Promise<any> => {
-  const { data, operation } = beforeChangeData
+  const { data, operation, req } = beforeChangeData
 
   if (operation === 'create') {
     const {
@@ -21,13 +22,14 @@ const sendEmail = async (beforeChangeData: any, formConfig: PluginConfig): Promi
         id: formID,
         collection: formOverrides?.slug || 'forms',
         locale,
+        req,
       })
 
       const { emails } = form
 
       if (emails && emails.length) {
-        const formattedEmails: FormattedEmail[] = emails.map(
-          (email: Email): FormattedEmail | null => {
+        const formattedEmails: FormattedEmail[] = await Promise.all(
+          emails.map(async (email: Email): Promise<FormattedEmail | null> => {
             const {
               bcc: emailBCC,
               cc: emailCC,
@@ -44,16 +46,22 @@ const sendEmail = async (beforeChangeData: any, formConfig: PluginConfig): Promi
             const from = replaceDoubleCurlys(emailFrom, submissionData)
             const replyTo = replaceDoubleCurlys(emailReplyTo || emailFrom, submissionData)
 
+            const isLexical = message && !Array.isArray(message) && 'root' in message
+
+            const serializedMessage = isLexical
+              ? await serializeLexical(message, submissionData)
+              : serializeSlate(message, submissionData)
+
             return {
               bcc,
               cc,
               from,
-              html: `<div>${serialize(message, submissionData)}</div>`,
+              html: `<div>${serializedMessage}</div>`,
               replyTo,
               subject: replaceDoubleCurlys(subject, submissionData),
               to,
             }
-          },
+          }),
         )
 
         let emailsToSend = formattedEmails
@@ -72,7 +80,9 @@ const sendEmail = async (beforeChangeData: any, formConfig: PluginConfig): Promi
               return emailPromise
             } catch (err: unknown) {
               payload.logger.error({
-                err: `Error while sending email to address: ${to}. Email not sent: ${err}`,
+                err: `Error while sending email to address: ${to}. Email not sent: ${JSON.stringify(
+                  err,
+                )}`,
               })
             }
           }),
